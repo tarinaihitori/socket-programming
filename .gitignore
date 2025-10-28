@@ -1,0 +1,30 @@
+# 実行ファイル
+server
+client
+
+# オブジェクトファイル
+*.o
+*.obj
+
+# デバッグファイル
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# エディタ設定
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+
+# OS固有
+.DS_Store
+Thumbs.db
+
+# コアダンプ
+core
+core.*
