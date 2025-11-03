@@ -5,13 +5,13 @@ CFLAGS = -Wall -Wextra -std=c11 -O2 -pthread -D_REENTRANT
 LDFLAGS = -lssl -lcrypto -pthread -lm
 
 # Target executables
-SERVER = secure_server
-CLIENT = secure_client
+SERVER = server
+CLIENT = client
 TARGETS = $(SERVER) $(CLIENT)
 
 # Source files
-SERVER_SRC = secure_server.c
-CLIENT_SRC = secure_client.c
+SERVER_SRC = server.c
+CLIENT_SRC = client.c
 
 # Default target - build both server and client
 all: $(TARGETS)
