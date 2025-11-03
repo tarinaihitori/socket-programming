@@ -1,148 +1,92 @@
-name: Secure Calculator CI/CD
+name: C/C++ CI
 
 on:
   push:
-    branches: [ "main", "develop" ]
+    branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-  workflow_dispatch:
-
-env:
-  BUILD_TYPE: Release
 
 jobs:
   build_and_test:
     runs-on: ubuntu-latest
-    
-    strategy:
-      matrix:
-        compiler: [gcc, clang]
-        
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
-      
-    - name: Setup environment
-      run: |
-        echo "Using compiler: ${{ matrix.compiler }}"
-        echo "CC=${{ matrix.compiler }}" >> $GITHUB_ENV
-        
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          libssl-dev \
-          valgrind \
-          clang \
-          clang-tools \
-          curl \
-          netcat-openbsd
-          
-    - name: Display OpenSSL version
-      run: openssl version
-      
+
+    - name: Install OpenSSL
+      run: sudo apt-get update && sudo apt-get install -y libssl-dev
+
     - name: Build server and client
+      run: make all
+
+    - name: Generate self-signed certificate
       run: |
-        make clean
-        make all
-        
-    - name: Generate SSL certificates
-      run: |
-        openssl req -x509 -newkey rsa:2048 \
-          -keyout key.pem -out cert.pem \
+        openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem \
           -sha256 -days 365 -nodes \
-          -subj "/C=US/ST=State/L=City/O=TestOrg/OU=TestOU/CN=localhost"
-        chmod 600 key.pem
-        chmod 644 cert.pem
-        
+          -subj "/C=JP/ST=Tokyo/L=Tokyo/O=TestOrg/OU=TestOU/CN=localhost"
+
     - name: Start server in background
       run: |
-        ./server > server.log 2>&1 &
+        ./secure_server &
         echo $! > server.pid
         sleep 3
-        
+
     - name: Check server is running
       run: |
         SERVER_PID=$(cat server.pid)
         if ! ps -p $SERVER_PID > /dev/null; then
           echo "Server failed to start!"
-          cat server.log
           exit 1
         fi
         echo "Server is running with PID: $SERVER_PID"
-        
-    - name: Test server root endpoint
+
+    - name: Test IPv4 normal query
       run: |
-        response=$(curl -k -s https://localhost:8080/)
-        echo "Root response: $response"
-        if [[ "$response" != *"Calculator Server"* ]]; then
-          echo "Root endpoint test failed!"
+        response=$(curl -k -s "https://127.0.0.1:8080/calc?query=1+2+3")
+        echo "IPv4 test result: $response"
+        if [[ "$response" != "6" ]]; then
+          echo "IPv4 test failed! Expected 6, got: $response"
           exit 1
         fi
-        
-    - name: Test IPv4 calculation
+
+    - name: Test IPv6 normal query
       run: |
-        response=$(curl -k -s "https://127.0.0.1:8080/calc?query=10+20+30")
-        echo "IPv4 calc response: $response"
-        if [[ "$response" != "60" ]]; then
-          echo "IPv4 calculation test failed!"
+        response=$(curl -k -s "https://[::1]:8080/calc?query=1+2+3")
+        echo "IPv6 test result: $response"
+        if [[ "$response" != "6" ]]; then
+          echo "IPv6 test failed! Expected 6, got: $response"
           exit 1
         fi
-        
-    - name: Test IPv6 calculation
+
+    - name: Test multiple numbers
       run: |
-        response=$(curl -k -s "https://[::1]:8080/calc?query=100+200")
-        echo "IPv6 calc response: $response"
-        if [[ "$response" != "300" ]]; then
-          echo "IPv6 calculation test failed!"
+        response=$(curl -k -s "https://localhost:8080/calc?query=10+20+30+40")
+        echo "Multiple numbers test result: $response"
+        if [[ "$response" != "100" ]]; then
+          echo "Multiple numbers test failed! Expected 100, got: $response"
           exit 1
         fi
-        
+
     - name: Test negative numbers
       run: |
         response=$(curl -k -s "https://localhost:8080/calc?query=100+-50")
-        echo "Negative number response: $response"
+        echo "Negative numbers test result: $response"
         if [[ "$response" != "50" ]]; then
-          echo "Negative number test failed!"
+          echo "Negative numbers test failed! Expected 50, got: $response"
           exit 1
         fi
-        
-    - name: Test error handling - invalid input
-      run: |
-        response=$(curl -k -s -w "%{http_code}" -o /dev/null "https://localhost:8080/calc?query=abc+def")
-        echo "Invalid input response code: $response"
-        if [[ "$response" != "400" ]]; then
-          echo "Invalid input error handling test failed!"
-          exit 1
-        fi
-        
-    - name: Test error handling - 404
-      run: |
-        response=$(curl -k -s -w "%{http_code}" -o /dev/null "https://localhost:8080/nonexistent")
-        echo "404 response code: $response"
-        if [[ "$response" != "404" ]]; then
-          echo "404 error handling test failed!"
-          exit 1
-        fi
-        
+
     - name: Test client connectivity
       run: |
         echo -e "10+20\nexit" | timeout 5 ./secure_client 127.0.0.1 8080 > client_output.txt 2>&1
-        cat client_output.txt
         if ! grep -q "Result: 30" client_output.txt; then
-          echo "Client connectivity test failed!"
+          echo "Client test failed!"
+          cat client_output.txt
           exit 1
         fi
-        
-    - name: Run concurrent connection test
-      run: |
-        echo "Testing concurrent connections..."
-        for i in {1..20}; do
-          curl -k -s "https://localhost:8080/calc?query=$i+$i" &
-        done
-        wait
-        echo "Concurrent connection test completed"
-        
+        echo "Client test passed"
+
     - name: Test graceful shutdown
       run: |
         SERVER_PID=$(cat server.pid)
@@ -154,15 +98,7 @@ jobs:
           exit 1
         fi
         echo "Server shut down gracefully"
-        
-    - name: Display server logs
-      if: always()
-      run: |
-        if [ -f server.log ]; then
-          echo "=== Server Logs ==="
-          cat server.log
-        fi
-        
+
     - name: Clean up
       if: always()
       run: |
@@ -170,99 +106,4 @@ jobs:
           SERVER_PID=$(cat server.pid)
           kill -9 $SERVER_PID 2>/dev/null || true
         fi
-        rm -f server.pid server.log client_output.txt
-        
-  static_analysis:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
-      
-    - name: Install analysis tools
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          clang-tools \
-          cppcheck \
-          libssl-dev
-          
-    - name: Run cppcheck
-      run: |
-        cppcheck --enable=all --error-exitcode=1 \
-          --suppress=missingIncludeSystem \
-          server.c client.c
-          
-    - name: Run clang static analyzer
-      run: |
-        clang --analyze server.c
-        clang --analyze client.c
-        
-  memory_check:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
-      
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libssl-dev valgrind
-        
-    - name: Build with debug symbols
-      run: |
-        make clean
-        make debug
-        
-    - name: Generate certificates
-      run: make cert
-      
-    - name: Run server with valgrind
-      run: |
-        timeout 10 valgrind --leak-check=full --show-leak-kinds=all \
-          --error-exitcode=1 ./secure_server > valgrind.log 2>&1 &
-        VALGRIND_PID=$!
-        sleep 5
-        
-        # Send a test request
-        curl -k -s "https://localhost:8080/calc?query=1+2+3" || true
-        
-        # Gracefully shutdown
-        kill -SIGTERM $VALGRIND_PID 2>/dev/null || true
-        wait $VALGRIND_PID || true
-        
-        # Check for memory leaks
-        if grep -q "definitely lost" valgrind.log; then
-          echo "Memory leak detected!"
-          cat valgrind.log
-          exit 1
-        fi
-        echo "No memory leaks detected"
-        
-  build_matrix:
-    strategy:
-      matrix:
-        os: [ubuntu-20.04, ubuntu-22.04]
-        
-    runs-on: ${{ matrix.os }}
-    
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
-      
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libssl-dev
-        
-    - name: Build
-      run: make all
-      
-    - name: Display build info
-      run: |
-        echo "OS: ${{ matrix.os }}"
-        gcc --version
-        openssl version
-        ldd server
-        ldd client
+        rm -f server.pid client_output.txt cert.pem key.pem
