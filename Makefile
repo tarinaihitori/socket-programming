@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c11 -g -pthread -I/opt/homebrew/opt/openssl/include -L/opt/homebrew/opt/openssl/lib -lssl -lcrypto
+CFLAGS = -Wall -Wextra -std=c11 -g -pthread -lssl -lcrypto
 TARGETS = server client
 
 .PHONY: all clean
