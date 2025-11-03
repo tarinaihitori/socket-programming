@@ -4,12 +4,15 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <netdb.h>
+#include <arpa/inet.h>
 #include <ctype.h>
 #include <pthread.h>
 #include <signal.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
+#include <math.h>
 
 #define PORT "8080"
 #define BUFFER_SIZE 1024
