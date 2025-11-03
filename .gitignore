@@ -1,3 +1,4 @@
+
 # 実行ファイル
 server
 client
@@ -28,3 +29,5 @@ Thumbs.db
 # コアダンプ
 core
 core.*
+key.pem
+cert.pem

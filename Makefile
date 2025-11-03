@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c11 -g
+CFLAGS = -Wall -Wextra -std=c11 -g -pthread -lssl -lcrypto
 TARGETS = server client
 
 .PHONY: all clean

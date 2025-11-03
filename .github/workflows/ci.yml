@@ -1,0 +1,50 @@
+
+name: C/C++ CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Install OpenSSL
+      run: sudo apt-get update && sudo apt-get install -y libssl-dev
+
+    - name: Build
+      run: make
+
+    - name: Generate self-signed certificate
+      run: openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -sha256 -days 365 -nodes -subj "/C=JP/ST=Tokyo/L=Tokyo/O=Gemini/OU=Gemini/CN=localhost"
+
+    - name: Run server
+      run: ./server &
+
+    - name: Wait for server
+      run: sleep 3
+
+    - name: Test IPv4 normal query
+      run: |
+        echo "1+2+3" | ./client 127.0.0.1 > test_output.txt
+        cat test_output.txt
+        grep "Received: HTTP/1.1 200 OK" test_output.txt
+        grep "6" test_output.txt
+
+    - name: Test IPv6 normal query
+      run: |
+        echo "1+2+3" | ./client ::1 > test_output.txt
+        cat test_output.txt
+        grep "Received: HTTP/1.1 200 OK" test_output.txt
+        grep "6" test_output.txt
+
+    - name: Test graceful shutdown
+      run: |
+        kill -SIGINT $(pgrep server)
+        sleep 3
+        if pgrep server; then exit 1; fi
